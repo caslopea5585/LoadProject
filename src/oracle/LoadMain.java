@@ -320,6 +320,9 @@ public class LoadMain extends JFrame implements ActionListener,TableModelListene
 		//컴마, 수정한 위치...
 		//update문 수정...
 		//update hospital set 컬럼명 = 값! where seq값으로...찍히는것만...아디오스..
+		
+		System.out.println(e.getColumn()+"라스트로우?"+e.getLastRow()); 
+		
 		System.out.println("바꿧어?");
 	}
 	
