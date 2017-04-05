@@ -13,7 +13,11 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Vector;
 
 import javax.swing.JButton;
 import javax.swing.JFileChooser;
@@ -23,6 +27,8 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
+import javax.swing.event.TableModelEvent;
+import javax.swing.event.TableModelListener;
 
 import org.apache.poi.hssf.usermodel.HSSFCell;
 import org.apache.poi.hssf.usermodel.HSSFRow;
@@ -30,7 +36,7 @@ import org.apache.poi.hssf.usermodel.HSSFSheet;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.ss.usermodel.DataFormatter;
 
-public class LoadMain extends JFrame implements ActionListener{
+public class LoadMain extends JFrame implements ActionListener,TableModelListener{
 	JPanel p_north;
 	JTextField t_path;
 	JButton bt_open, bt_load,bt_excel,bt_del;
@@ -41,6 +47,10 @@ public class LoadMain extends JFrame implements ActionListener{
 	BufferedReader buffr = null;
 	Connection con; //윈도우 창이 열리면 이미 접속을 확보해놓자
 	DBManager manager=DBManager.getInstance();
+	ArrayList<String> value= new ArrayList<String>();
+	Vector<Vector> list;
+	Vector ColumnName;
+	MyModel myModel;
 	
 	public LoadMain() {
 		p_north = new JPanel();
@@ -66,6 +76,8 @@ public class LoadMain extends JFrame implements ActionListener{
 		bt_load.addActionListener(this);
 		bt_excel.addActionListener(this);
 		bt_del.addActionListener(this);
+		
+		
 		
 		//윈도우와 리스너의 연결
 		this.addWindowListener(new WindowAdapter() {
@@ -130,6 +142,14 @@ public class LoadMain extends JFrame implements ActionListener{
 				}
 			}
 			JOptionPane.showMessageDialog(this, "마이그레이션 완료!!");
+			
+			//JTable나오게 처리!!
+			getList();
+			table.setModel(new MyModel(list, ColumnName));
+			table.getModel().addTableModelListener(this);//테이블 모델과 리스너와의 연결(테이블 모델과 리스너 연결이므로..테이블에서 쓰고 있는 모델을 받아와서 거기에 리스너를 붙여야함)
+			//물론 Mymodel을 전역으로 빼서 해도되긴함...단 이런경우 시점상의 차이가 발생할 수 도 있음.
+			table.updateUI();
+			
 		} catch (IOException e) {
 			e.printStackTrace();
 		} catch (SQLException e) {
@@ -169,7 +189,6 @@ public class LoadMain extends JFrame implements ActionListener{
 				book = new HSSFWorkbook(fis);
 				
 				
-				
 				HSSFSheet sheet = null;
 				sheet = book.getSheet("동물병원");
 				
@@ -177,23 +196,93 @@ public class LoadMain extends JFrame implements ActionListener{
 				int total = sheet.getLastRowNum();
 				DataFormatter df=new DataFormatter(); //데이터의 자료형을 포맷화시켜주는거...(아파치 자료형..)
 				
+				PreparedStatement pstmt=null;
+				String sql="";
+				String sql2="";
+				
+				
+				
 				for(int i=1; i<=total;i++){
 					HSSFRow row =sheet.getRow(i);
 					int columnCount= row.getLastCellNum();
 					for(int j=0;j<columnCount;j++){
 						HSSFCell cell =row.getCell(j);
-						//자료형에 국한되지 않고 모두 String처리 할 수 있다.
-						String value = df.formatCellValue(cell);
-						System.out.print(value);
+						//자료형에 국한되지 않고 모두 String처리 할 수 있다.						
+						value.add(df.formatCellValue(cell));
 					}
+					sql="insert into hospital(seq,name,addr,regdate,status,dimenstion,type) values("+value.get(0)+",'"+value.get(1)+"','"+value.get(2)+"','"+value.get(3)+"','"+value.get(4)+"',"+value.get(5)+",'"+value.get(6)+"') ";
+					
+					pstmt=con.prepareStatement(sql);
+					int result2 = pstmt.executeUpdate(); //쿼리수행
+					
+					System.out.println(sql);
+					value.removeAll(value);
 					System.out.println("");
 				}				
+				JOptionPane.showMessageDialog(this, "입력완료");
 			} catch (FileNotFoundException e) {
 				e.printStackTrace();
 			} catch (IOException e) {
 				e.printStackTrace();
+			} catch (SQLException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
 			}
 			
+		}
+		
+	}
+
+	//모든 레코드 가져오기!!
+	public void getList(){
+		String sql="select * from hospital order by seq asc";
+		PreparedStatement pstmt=null;
+		ResultSet rs=null;
+		
+		try {
+			pstmt=con.prepareStatement(sql);
+			rs= pstmt.executeQuery();
+			//컬럼명도 추출하자..
+			ResultSetMetaData meta=  rs.getMetaData();
+			int count = meta.getColumnCount();
+			ColumnName = new Vector();
+			for(int i=0;i<count;i++){
+				ColumnName.add(meta.getColumnName(i+1));
+			}
+			
+			
+			list = new Vector<Vector>(); //2차원 벡터		
+			
+			while(rs.next()){ 
+				Vector vec = new Vector(); //1차원 벡터 ...
+				vec.add(rs.getString("seq"));
+				vec.add(rs.getString("name"));
+				vec.add(rs.getString("addr"));
+				vec.add(rs.getString("regdate"));
+				vec.add(rs.getString("status"));
+				vec.add(rs.getString("dimenstion"));
+				vec.add(rs.getString("type"));
+				list.add(vec);
+			}
+			
+			
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}finally{
+			try {
+				if(rs!=null){
+					rs.close();
+				}
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
+			try {
+				if(pstmt!=null){
+					pstmt.close();
+				}
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
 		}
 		
 	}
@@ -224,6 +313,14 @@ public class LoadMain extends JFrame implements ActionListener{
 		//DB 컨넥션 얻어다 놓기
 		con=manager.getConnection();
 		
+	}
+	
+	//테이블 모델의 데이터값에 변경이 발생하면 그 찰나를...감지하는 리스너..
+	public void tableChanged(TableModelEvent e) {
+		//컴마, 수정한 위치...
+		//update문 수정...
+		//update hospital set 컬럼명 = 값! where seq값으로...찍히는것만...아디오스..
+		System.out.println("바꿧어?");
 	}
 	
 	public static void main(String[] args) {
