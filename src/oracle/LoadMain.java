@@ -36,6 +36,8 @@ import org.apache.poi.hssf.usermodel.HSSFSheet;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.ss.usermodel.DataFormatter;
 
+import util.file.FileUtil;
+
 public class LoadMain extends JFrame implements ActionListener,TableModelListener{
 	JPanel p_north;
 	JTextField t_path;
@@ -55,7 +57,7 @@ public class LoadMain extends JFrame implements ActionListener,TableModelListene
 	public LoadMain() {
 		p_north = new JPanel();
 		t_path=new JTextField(25);
-		bt_open=new JButton("파일열기");
+		bt_open=new JButton("CSV파일열기");
 		bt_load=new JButton("로드하기");
 		bt_excel= new JButton("엑셀로드");
 		bt_del=new JButton("삭제하기");
@@ -102,13 +104,20 @@ public class LoadMain extends JFrame implements ActionListener,TableModelListene
 		//열기를 누르면 목적파일의 스트림을 생성하자.
 		if(result==JFileChooser.APPROVE_OPTION){
 			File file = chooser.getSelectedFile(); //유저가 선택한 파일
-			t_path.setText(file.getAbsolutePath());
-			try {
-				reader =new FileReader(file);
-				buffr = new BufferedReader(reader);
-			} catch (FileNotFoundException e) {
-				e.printStackTrace();
-			}			
+			String ext = FileUtil.getExt(file.getName());
+			
+			if(!ext.equals("csv")){
+				JOptionPane.showMessageDialog(this, "CSV만 넣어주세요!");
+				return;//진행막자
+			}else{
+				t_path.setText(file.getAbsolutePath());
+				try {
+					reader =new FileReader(file);
+					buffr = new BufferedReader(reader);
+				} catch (FileNotFoundException e) {
+					e.printStackTrace();
+				}			
+			}
 		}
 	}
 	
@@ -128,7 +137,7 @@ public class LoadMain extends JFrame implements ActionListener,TableModelListene
 				if(data==null)break;
 				String[] value = data.split(",");
 				if(!value[0].equals("seq")){ //발견되지 않을경우에만 insert할꺼야~
-					sb.append("insert into hospital(seq,name,addr,regdate,status,dimenstion,type)");
+					sb.append("insert into hospital(seq,name,addr,regdate,status,dimension,type)");
 					sb.append(" values("+value[0]+",'"+value[1]+"','"+value[2]+"','"+value[3]+"','"+value[4]+"',"+value[5]+",'"+value[6]+"')");
 					
 					pstmt=con.prepareStatement(sb.toString());
@@ -182,6 +191,9 @@ public class LoadMain extends JFrame implements ActionListener,TableModelListene
 		if(result==JFileChooser.APPROVE_OPTION){
 			File file = chooser.getSelectedFile();
 			FileInputStream fis=null;
+			StringBuffer cols = new StringBuffer();
+			StringBuffer data = new StringBuffer();
+			
 			try {
 				fis =new FileInputStream(file);
 				
@@ -198,20 +210,48 @@ public class LoadMain extends JFrame implements ActionListener,TableModelListene
 				
 				PreparedStatement pstmt=null;
 				String sql="";
-				String sql2="";
 				
+				/*---------------------------------------------
+				 *  첫번째 row는 데이터가 아닌 컬럼 정보이므로 
+				 *  이정보들을 추출하여 insert into table(~~~~)에 넣자
+				 * --------------------------------------------*/
 				
+				System.out.println("이 파일의 첫번째 row번호는? " + sheet.getFirstRowNum());
+				HSSFRow firstRow = sheet.getRow(sheet.getFirstRowNum());
+				//Row을 얻었으니 컬럼을 분석하자
+				firstRow.getLastCellNum(); //마지막 셀 넘버
+				cols.delete(0, cols.length());
+				
+				for(int i=0;i<firstRow.getLastCellNum();i++){
+					HSSFCell cell = firstRow.getCell(i);
+					if(i <firstRow.getLastCellNum()){
+						cols.append(cell.getStringCellValue()+",");
+						System.out.print(cell.getStringCellValue()+",");
+					}else{
+						
+						cols.append(cell.getStringCellValue());
+						System.out.print(cell.getStringCellValue());
+					}
+						
+				}
 				
 				for(int i=1; i<=total;i++){
 					HSSFRow row =sheet.getRow(i);
 					int columnCount= row.getLastCellNum();
+					
+					
 					for(int j=0;j<columnCount;j++){
 						HSSFCell cell =row.getCell(j);
 						//자료형에 국한되지 않고 모두 String처리 할 수 있다.						
-						value.add(df.formatCellValue(cell));
+						if(j<columnCount-1){
+							data.append(df.formatCellValue(cell)+",");
+						}else{
+							data.append(df.formatCellValue(cell));
+						}
 					}
-					sql="insert into hospital(seq,name,addr,regdate,status,dimenstion,type) values("+value.get(0)+",'"+value.get(1)+"','"+value.get(2)+"','"+value.get(3)+"','"+value.get(4)+"',"+value.get(5)+",'"+value.get(6)+"') ";
-					
+					sql="insert into hospital("+cols.toString()+") values("+data.toString()+")";
+					System.out.println("");
+					System.out.println(sql);
 					pstmt=con.prepareStatement(sql);
 					int result2 = pstmt.executeUpdate(); //쿼리수행
 					
@@ -260,7 +300,7 @@ public class LoadMain extends JFrame implements ActionListener,TableModelListene
 				vec.add(rs.getString("addr"));
 				vec.add(rs.getString("regdate"));
 				vec.add(rs.getString("status"));
-				vec.add(rs.getString("dimenstion"));
+				vec.add(rs.getString("dimension"));
 				vec.add(rs.getString("type"));
 				list.add(vec);
 			}
@@ -321,9 +361,28 @@ public class LoadMain extends JFrame implements ActionListener,TableModelListene
 		//update문 수정...
 		//update hospital set 컬럼명 = 값! where seq값으로...찍히는것만...아디오스..
 		
+		//String sql="update hospital set ";
 		System.out.println(e.getColumn()+"라스트로우?"+e.getLastRow()); 
 		
-		System.out.println("바꿧어?");
+		System.out.println(ColumnName.elementAt(e.getColumn())); //웨얼의 칼럼조건
+		String set_val = (String)ColumnName.elementAt(e.getColumn());
+		String seq_val = (String)ColumnName.elementAt(e.getLastRow());
+		
+
+		
+		
+		//System.out.println("ddd"+set_val2+"Ddd"+seq_val2);
+		//System.out.println((list.get(set_val2).get(seq_val2)));
+		
+		
+		//System.out.println(list.get(ColumnName.elementAt(e.getColumn())));
+		
+
+
+		String sql = "update hospital set "+set_val+" = "+set_val +" where "+seq_val+" = ";
+		System.out.println(set_val+"셋발"+seq_val+"seq");
+		
+		System.out.println((list.get(0)).get(3));
 	}
 	
 	public static void main(String[] args) {
