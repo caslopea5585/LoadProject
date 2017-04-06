@@ -3,6 +3,8 @@ package oracle;
 import java.awt.BorderLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.BufferedReader;
@@ -57,6 +59,7 @@ public class LoadMain extends JFrame implements ActionListener,TableModelListene
 							//데이터량이 너무 많을 경우, 네트워크 상태가 좋지 않을경우 insert가 while문 속도를 못따라간다.
 						//따라서 안정성을 위해 일부러 시간지연을 일으킨다...
 	StringBuffer insertSql = new StringBuffer();//엑셀파일에 의해 생성된 쿼리문을 쓰레드가 사용할 수 있는 상태로 저장해놓자...
+	String seq;
 	
 	public LoadMain() {
 		p_north = new JPanel();
@@ -82,7 +85,17 @@ public class LoadMain extends JFrame implements ActionListener,TableModelListene
 		bt_load.addActionListener(this);
 		bt_excel.addActionListener(this);
 		bt_del.addActionListener(this);
-		
+		table.addMouseListener(new MouseAdapter() {
+			public void mouseClicked(MouseEvent e) {
+				JTable t = (JTable)e.getSource();
+				
+				int row = t.getSelectedRow();
+				int col =0; //seq를 기준으로해서 삭제할꺼니깐... 무조건 0으로두자.
+				
+				seq = (String)t.getValueAt(row, 0);
+					
+			}
+		});
 		
 		
 		//윈도우와 리스너의 연결
@@ -331,7 +344,33 @@ public class LoadMain extends JFrame implements ActionListener,TableModelListene
 	
 	//선택한 레코드삭제
 	public void delete(){
+		PreparedStatement pstmt=null;
 		
+		int ans = JOptionPane.showConfirmDialog(LoadMain.this, seq+"선택한 레코드 삭제할래요?");
+		if(ans==JOptionPane.OK_OPTION){
+			String sql ="delete from hospital where seq = "+seq;
+			System.out.println(sql);
+			try {
+				pstmt=con.prepareStatement(sql);
+				int result = pstmt.executeUpdate();
+				if(result!=0){
+					JOptionPane.showMessageDialog(this, "삭제완료");
+					table.updateUI(); //테이블 갱신
+					
+				}
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}finally{
+				if(pstmt!=null){
+					try {
+						pstmt.close();
+					} catch (SQLException e) {
+						e.printStackTrace();
+					}
+				}
+			}
+			
+		}
 		
 	}
 	
@@ -362,29 +401,37 @@ public class LoadMain extends JFrame implements ActionListener,TableModelListene
 		//컴마, 수정한 위치...
 		//update문 수정...
 		//update hospital set 컬럼명 = 값! where seq값으로...찍히는것만...아디오스..
+		int row =table.getSelectedRow();
+		int col = table.getSelectedColumn();
+		PreparedStatement pstmt=null;		
 		
-		//String sql="update hospital set ";
-		System.out.println(e.getColumn()+"라스트로우?"+e.getLastRow()); 
+		String column = (String)ColumnName.elementAt(col);		
+		String value = (String)table.getValueAt(row, col);//지정한 좌표의 값 반환
+		String seq = (String)table.getValueAt(row, 0);
+		String sql ="update hospital set "+column+ "='"+value+"'";
+		sql+=" where seq="+seq;
 		
-		System.out.println(ColumnName.elementAt(e.getColumn())); //웨얼의 칼럼조건
-		String set_val = (String)ColumnName.elementAt(e.getColumn());
-		String seq_val = (String)ColumnName.elementAt(e.getLastRow());
+		System.out.println(sql);
+		try {
+			pstmt= con.prepareStatement(sql);
+			int result = pstmt.executeUpdate();
+			if(result!=0){
+				JOptionPane.showMessageDialog(this, "수정완료");
+			}
+		} catch (SQLException e1) {
+			e1.printStackTrace();
+		} finally{
+			if(pstmt!=null){
+				try {
+					pstmt.close();
+				} catch (SQLException e1) {
+					e1.printStackTrace();
+				}
+			}
 		
-
+		}
 		
 		
-		//System.out.println("ddd"+set_val2+"Ddd"+seq_val2);
-		//System.out.println((list.get(set_val2).get(seq_val2)));
-		
-		
-		//System.out.println(list.get(ColumnName.elementAt(e.getColumn())));
-		
-
-
-		String sql = "update hospital set "+set_val+" = "+set_val +" where "+seq_val+" = ";
-		System.out.println(set_val+"셋발"+seq_val+"seq");
-		
-		System.out.println((list.get(0)).get(3));
 	}
 	
 	public void run() {

@@ -40,8 +40,13 @@ public class MyModel extends AbstractTableModel {
 	//테이블은 테이블모델에 의존해있다..따라서 테이블을 수정하게하려면 오버라이드 메서드를 호출해서 true를 가능하게해야한다.
 	//(row,col)에 위치한 셀을 편집가능하게 한다.
 	public boolean isCellEditable(int row, int col) {
-		 
-		return true;
+		boolean flag = false;
+		if(col==0){
+			flag=false;
+		}else{
+			flag=true;
+		}
+		return flag;
 	}
 	
 	//수정한 값이 적용될 수 있도록...오버라이드 메서드
