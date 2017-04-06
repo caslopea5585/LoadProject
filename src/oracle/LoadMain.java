@@ -38,7 +38,7 @@ import org.apache.poi.ss.usermodel.DataFormatter;
 
 import util.file.FileUtil;
 
-public class LoadMain extends JFrame implements ActionListener,TableModelListener{
+public class LoadMain extends JFrame implements ActionListener,TableModelListener,Runnable{
 	JPanel p_north;
 	JTextField t_path;
 	JButton bt_open, bt_load,bt_excel,bt_del;
@@ -53,6 +53,10 @@ public class LoadMain extends JFrame implements ActionListener,TableModelListene
 	Vector<Vector> list;
 	Vector ColumnName;
 	MyModel myModel;
+	Thread thread; //엑셀 등록시 사용될 쓰레드....
+							//데이터량이 너무 많을 경우, 네트워크 상태가 좋지 않을경우 insert가 while문 속도를 못따라간다.
+						//따라서 안정성을 위해 일부러 시간지연을 일으킨다...
+	StringBuffer insertSql = new StringBuffer();//엑셀파일에 의해 생성된 쿼리문을 쓰레드가 사용할 수 있는 상태로 저장해놓자...
 	
 	public LoadMain() {
 		p_north = new JPanel();
@@ -224,7 +228,7 @@ public class LoadMain extends JFrame implements ActionListener,TableModelListene
 				
 				for(int i=0;i<firstRow.getLastCellNum();i++){
 					HSSFCell cell = firstRow.getCell(i);
-					if(i <firstRow.getLastCellNum()){
+					if(i <firstRow.getLastCellNum()-1){
 						cols.append(cell.getStringCellValue()+",");
 						System.out.print(cell.getStringCellValue()+",");
 					}else{
@@ -239,33 +243,31 @@ public class LoadMain extends JFrame implements ActionListener,TableModelListene
 					HSSFRow row =sheet.getRow(i);
 					int columnCount= row.getLastCellNum();
 					
-					
+					data.delete(0, data.length());
 					for(int j=0;j<columnCount;j++){
 						HSSFCell cell =row.getCell(j);
-						//자료형에 국한되지 않고 모두 String처리 할 수 있다.						
+						String value2 = df.formatCellValue(cell);
+						//자료형에 국한되지 않고 모두 String처리 할 수 있다.
+						if(cell.getCellType()==HSSFCell.CELL_TYPE_STRING){
+							value2="'"+value2+"'";
+						}
+						
 						if(j<columnCount-1){
-							data.append(df.formatCellValue(cell)+",");
+							data.append(value2+",");
 						}else{
-							data.append(df.formatCellValue(cell));
+							data.append(value2);
 						}
 					}
-					sql="insert into hospital("+cols.toString()+") values("+data.toString()+")";
-					System.out.println("");
-					System.out.println(sql);
-					pstmt=con.prepareStatement(sql);
-					int result2 = pstmt.executeUpdate(); //쿼리수행
-					
-					System.out.println(sql);
-					value.removeAll(value);
-					System.out.println("");
+					sql="insert into hospital("+cols.toString()+") values("+data.toString()+");";
+					insertSql.append(sql);
+
 				}				
-				JOptionPane.showMessageDialog(this, "입력완료");
+				//모든것이 끝낫으니 편안하게 쓰레드에게 일시키자!! 타이밍 문제 해결
+				thread = new Thread(this); //쓰레드 자체의 run을 수행하는 것이 아니라.. 내 클래스의 run을 수행하게 된다!this을 넣는 이유(타켓!)
+				thread.start();
 			} catch (FileNotFoundException e) {
 				e.printStackTrace();
 			} catch (IOException e) {
-				e.printStackTrace();
-			} catch (SQLException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 			
@@ -383,6 +385,42 @@ public class LoadMain extends JFrame implements ActionListener,TableModelListene
 		System.out.println(set_val+"셋발"+seq_val+"seq");
 		
 		System.out.println((list.get(0)).get(3));
+	}
+	
+	public void run() {
+		PreparedStatement pstmt=null;
+		
+		
+		//insertSql에 insert문이 몇개인지 알아보자
+		String[] str = insertSql.toString().split(";");
+		System.out.println("인서트 문의 숫자는 = "+ str.length);
+		for(int i=0 ; i<str.length;i++){
+			
+			try {
+				thread.sleep(1000);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+			try {
+				pstmt = con.prepareStatement(str[i]);
+				int result = pstmt.executeUpdate();
+				System.out.println("찍는중" + i+"번째");
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
+		}
+		
+		//기존에 사용했던 StringBuffer 비우기
+		insertSql.delete(0, insertSql.length());
+		if(pstmt!=null){
+			try {
+				pstmt.close();
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
+		}
+		
+		
 	}
 	
 	public static void main(String[] args) {
