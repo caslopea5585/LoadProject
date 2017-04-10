@@ -171,7 +171,7 @@ public class LoadMain extends JFrame implements ActionListener,TableModelListene
 			
 			//JTable나오게 처리!!
 			getList();
-			table.setModel(new MyModel(list, ColumnName));
+			table.setModel(myModel = new MyModel(list, ColumnName));
 			table.getModel().addTableModelListener(this);//테이블 모델과 리스너와의 연결(테이블 모델과 리스너 연결이므로..테이블에서 쓰고 있는 모델을 받아와서 거기에 리스너를 붙여야함)
 			//물론 Mymodel을 전역으로 빼서 해도되긴함...단 이런경우 시점상의 차이가 발생할 수 도 있음.
 			table.updateUI();
@@ -355,8 +355,10 @@ public class LoadMain extends JFrame implements ActionListener,TableModelListene
 				int result = pstmt.executeUpdate();
 				if(result!=0){
 					JOptionPane.showMessageDialog(this, "삭제완료");
-					table.updateUI(); //테이블 갱신
-					
+					getList();
+					//방금완성된 list를 다시 Mymodel클래스에 대입
+					myModel.list=list;
+					table.updateUI();
 				}
 			} catch (SQLException e) {
 				e.printStackTrace();
